@@ -78,121 +78,161 @@ static void cleanup_oopstorages() {
   }
 }
 
+enum ServiceWorkType {
+  SENSORS_CHANGED,
+  HAS_JVMTI_EVENTS,
+  HAS_GC_NOTIFICATION_EVENT,
+  HAS_DCMD_NOTIFICATION_EVENT,
+  STRINGTABLE_WORK,
+  SYMBOLTABLE_WORK,
+  FINALIZERSERVICE_WORK,
+  RESOLVED_METHOD_TABLE_WORK,
+  THREAD_ID_TABLE_WORK,
+  PROTECTION_DOMAIN_TABLE_WORK,
+  OOPSTORAGE_WORK,
+  OOP_HANDLES_TO_RELEASE,
+  CLDG_CLEANUP_WORK,
+  JVMTI_TAGMAP_WORK,
+
+  SERVICE_WORK_TYPE_NOOF
+};
+
+class ServiceWork {
+ private:
+  bool _pending[SERVICE_WORK_TYPE_NOOF];
+  bool _any_pending;
+  JvmtiDeferredEvent _jvmti_event;
+
+ public:
+  ServiceWork() : _any_pending(false) {
+    memset(_pending, 0, sizeof(_pending));
+  }
+
+  void set_pending(ServiceWorkType type, bool pending) {
+    _pending[type] = pending;
+    if (pending) {
+      _any_pending = true;
+    }
+  }
+
+  bool any_pending() {
+    return _any_pending;
+  }
+
+  bool is_pending(ServiceWorkType type) {
+    return _pending[type];
+  }
+
+  void set_jvmti_event(JvmtiDeferredEvent jvmti_event) {
+    _jvmti_event = jvmti_event;
+  }
+
+  JvmtiDeferredEvent* get_jvmti_event() {
+    return &_jvmti_event;
+  }
+};
+
+ServiceWork ServiceThread::wait_for_work(JavaThread* jt) {
+  // Need state transition ThreadBlockInVM so that this thread
+  // will be handled by safepoint correctly when this thread is
+  // notified at a safepoint.
+
+  // This ThreadBlockInVM object is not also considered to be
+  // suspend-equivalent because ServiceThread is not visible to
+  // external suspension.
+
+  ThreadBlockInVM tbivm(jt);
+
+  MonitorLocker ml(Service_lock, Mutex::_no_safepoint_check_flag);
+  ServiceWork pending_work;
+  for (;;) {
+    pending_work.set_pending(SENSORS_CHANGED, !UseNotificationThread && LowMemoryDetector::has_pending_requests());
+    pending_work.set_pending(HAS_JVMTI_EVENTS, _jvmti_service_queue.has_events());
+    pending_work.set_pending(HAS_GC_NOTIFICATION_EVENT, !UseNotificationThread && GCNotifier::has_event());
+    pending_work.set_pending(HAS_DCMD_NOTIFICATION_EVENT, !UseNotificationThread && DCmdFactory::has_pending_jmx_notification());
+    pending_work.set_pending(STRINGTABLE_WORK, StringTable::has_work());
+    pending_work.set_pending(SYMBOLTABLE_WORK, SymbolTable::has_work());
+    pending_work.set_pending(FINALIZERSERVICE_WORK, FinalizerService::has_work());
+    pending_work.set_pending(RESOLVED_METHOD_TABLE_WORK, ResolvedMethodTable::has_work());
+    pending_work.set_pending(THREAD_ID_TABLE_WORK, ThreadIdTable::has_work());
+    pending_work.set_pending(PROTECTION_DOMAIN_TABLE_WORK, ProtectionDomainCacheTable::has_work());
+    pending_work.set_pending(OOPSTORAGE_WORK, OopStorage::has_cleanup_work_and_reset());
+    pending_work.set_pending(OOP_HANDLES_TO_RELEASE, JavaThread::has_oop_handles_to_release());
+    pending_work.set_pending(CLDG_CLEANUP_WORK, ClassLoaderDataGraph::should_clean_metaspaces_and_reset());
+    pending_work.set_pending(JVMTI_TAGMAP_WORK, JvmtiTagMap::has_object_free_events_and_reset());
+    if (pending_work.any_pending()) {
+      if (pending_work.is_pending(HAS_JVMTI_EVENTS)) {
+        // Get the event under the Service_lock
+        pending_work.set_jvmti_event(_jvmti_service_queue.dequeue());
+        _jvmti_event = pending_work.get_jvmti_event();
+      }
+      return pending_work;
+    }
+    // Wait until notified that there is some work to do.
+    ml.wait();
+  }
+}
+
 void ServiceThread::service_thread_entry(JavaThread* jt, TRAPS) {
   while (true) {
-    bool sensors_changed = false;
-    bool has_jvmti_events = false;
-    bool has_gc_notification_event = false;
-    bool has_dcmd_notification_event = false;
-    bool stringtable_work = false;
-    bool symboltable_work = false;
-    bool finalizerservice_work = false;
-    bool resolved_method_table_work = false;
-    bool thread_id_table_work = false;
-    bool protection_domain_table_work = false;
-    bool oopstorage_work = false;
-    JvmtiDeferredEvent jvmti_event;
-    bool oop_handles_to_release = false;
-    bool cldg_cleanup_work = false;
-    bool jvmti_tagmap_work = false;
-    {
-      // Need state transition ThreadBlockInVM so that this thread
-      // will be handled by safepoint correctly when this thread is
-      // notified at a safepoint.
+    ServiceWork pending_work = wait_for_work(jt);
 
-      // This ThreadBlockInVM object is not also considered to be
-      // suspend-equivalent because ServiceThread is not visible to
-      // external suspension.
-
-      ThreadBlockInVM tbivm(jt);
-
-      MonitorLocker ml(Service_lock, Mutex::_no_safepoint_check_flag);
-      // Process all available work on each (outer) iteration, rather than
-      // only the first recognized bit of work, to avoid frequently true early
-      // tests from potentially starving later work.  Hence the use of
-      // arithmetic-or to combine results; we don't want short-circuiting.
-      while (((sensors_changed = (!UseNotificationThread && LowMemoryDetector::has_pending_requests())) |
-              (has_jvmti_events = _jvmti_service_queue.has_events()) |
-              (has_gc_notification_event = (!UseNotificationThread && GCNotifier::has_event())) |
-              (has_dcmd_notification_event = (!UseNotificationThread && DCmdFactory::has_pending_jmx_notification())) |
-              (stringtable_work = StringTable::has_work()) |
-              (symboltable_work = SymbolTable::has_work()) |
-              (finalizerservice_work = FinalizerService::has_work()) |
-              (resolved_method_table_work = ResolvedMethodTable::has_work()) |
-              (thread_id_table_work = ThreadIdTable::has_work()) |
-              (protection_domain_table_work = ProtectionDomainCacheTable::has_work()) |
-              (oopstorage_work = OopStorage::has_cleanup_work_and_reset()) |
-              (oop_handles_to_release = JavaThread::has_oop_handles_to_release()) |
-              (cldg_cleanup_work = ClassLoaderDataGraph::should_clean_metaspaces_and_reset()) |
-              (jvmti_tagmap_work = JvmtiTagMap::has_object_free_events_and_reset())
-             ) == 0) {
-        // Wait until notified that there is some work to do.
-        ml.wait();
-      }
-
-      if (has_jvmti_events) {
-        // Get the event under the Service_lock
-        jvmti_event = _jvmti_service_queue.dequeue();
-        _jvmti_event = &jvmti_event;
-      }
-    }
-
-    if (stringtable_work) {
+    if (pending_work.is_pending(STRINGTABLE_WORK)) {
       StringTable::do_concurrent_work(jt);
     }
 
-    if (symboltable_work) {
+    if (pending_work.is_pending(SYMBOLTABLE_WORK)) {
       SymbolTable::do_concurrent_work(jt);
     }
 
-    if (finalizerservice_work) {
+    if (pending_work.is_pending(FINALIZERSERVICE_WORK)) {
       FinalizerService::do_concurrent_work(jt);
     }
 
-    if (has_jvmti_events) {
+    if (pending_work.is_pending(HAS_JVMTI_EVENTS)) {
       _jvmti_event->post();
       _jvmti_event = nullptr;  // reset
     }
 
     if (!UseNotificationThread) {
-      if (sensors_changed) {
+      if (pending_work.is_pending(SENSORS_CHANGED)) {
         LowMemoryDetector::process_sensor_changes(jt);
       }
 
-      if(has_gc_notification_event) {
+      if(pending_work.is_pending(HAS_GC_NOTIFICATION_EVENT)) {
         GCNotifier::sendNotification(CHECK);
       }
 
-      if(has_dcmd_notification_event) {
+      if(pending_work.is_pending(HAS_DCMD_NOTIFICATION_EVENT)) {
         DCmdFactory::send_notification(CHECK);
       }
     }
 
-    if (resolved_method_table_work) {
+    if (pending_work.is_pending(RESOLVED_METHOD_TABLE_WORK)) {
       ResolvedMethodTable::do_concurrent_work(jt);
     }
 
-    if (thread_id_table_work) {
+    if (pending_work.is_pending(THREAD_ID_TABLE_WORK)) {
       ThreadIdTable::do_concurrent_work(jt);
     }
 
-    if (protection_domain_table_work) {
+    if (pending_work.is_pending(PROTECTION_DOMAIN_TABLE_WORK)) {
       ProtectionDomainCacheTable::unlink();
     }
 
-    if (oopstorage_work) {
+    if (pending_work.is_pending(OOPSTORAGE_WORK)) {
       cleanup_oopstorages();
     }
 
-    if (oop_handles_to_release) {
+    if (pending_work.is_pending(OOP_HANDLES_TO_RELEASE)) {
       JavaThread::release_oop_handles();
     }
 
-    if (cldg_cleanup_work) {
+    if (pending_work.is_pending(CLDG_CLEANUP_WORK)) {
       ClassLoaderDataGraph::safepoint_and_clean_metaspaces();
     }
 
-    if (jvmti_tagmap_work) {
+    if (pending_work.is_pending(JVMTI_TAGMAP_WORK)) {
       JvmtiTagMap::flush_all_object_free_events();
     }
   }

@@ -32,6 +32,7 @@
 // events, oop storage cleanup, and the maintenance of string, symbol,
 // protection domain, and resolved method tables.
 class JvmtiDeferredEvent;
+class ServiceWork;
 
 class ServiceThread : public JavaThread {
   friend class VMStructs;
@@ -40,6 +41,7 @@ class ServiceThread : public JavaThread {
   static JvmtiDeferredEvent* _jvmti_event;
   static JvmtiDeferredEventQueue _jvmti_service_queue;
 
+  static ServiceWork wait_for_work(JavaThread* thread);
   static void service_thread_entry(JavaThread* thread, TRAPS);
   ServiceThread(ThreadFunction entry_point) : JavaThread(entry_point) {};
 
