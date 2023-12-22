@@ -66,7 +66,7 @@ ifeq ($(call isTargetOs, aix), false)
       DISABLED_WARNINGS_clang := undef, \
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN), \
-      LIBS_unix := -ljava -ljvm, \
+      LIBS_unix := -ljava, \
       LIBS_linux := $(ALSA_LIBS), \
       LIBS_macosx := -framework CoreAudio -framework CoreFoundation \
           -framework CoreServices -framework AudioUnit \

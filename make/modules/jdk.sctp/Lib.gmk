@@ -40,7 +40,7 @@ ifeq ($(call isTargetOsType, unix), true)
             java.base:libnio/ch, \
         LDFLAGS := $(LDFLAGS_JDKLIB) \
             $(call SET_SHARED_LIBRARY_ORIGIN), \
-        LIBS_unix := -lnio -lnet -ljava -ljvm, \
+        LIBS_unix := -lnio -lnet $(JDKLIB_LIBS), \
         LIBS_linux := -lpthread $(LIBDL), \
     ))
 

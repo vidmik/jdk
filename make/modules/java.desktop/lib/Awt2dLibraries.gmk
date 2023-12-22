@@ -153,7 +153,8 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBAWT, \
         -delayload:winspool.drv -delayload:imm32.dll \
         -delayload:ole32.dll -delayload:comdlg32.dll \
         -delayload:comctl32.dll -delayload:shlwapi.dll, \
-    LIBS_unix := -ljvm -ljava $(LIBM), \
+    LIBS := $(JDKLIB_LIBS), \
+    LIBS_unix := $(LIBM), \
     LIBS_linux :=  $(LIBDL), \
     LIBS_aix := $(LIBDL),\
     LIBS_macosx := -lmlib_image \
@@ -166,7 +167,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBAWT, \
     LIBS_windows := kernel32.lib user32.lib gdi32.lib winspool.lib \
         imm32.lib ole32.lib uuid.lib shell32.lib \
         comdlg32.lib winmm.lib comctl32.lib shlwapi.lib \
-        delayimp.lib jvm.lib $(WIN_JAVA_LIB) advapi32.lib, \
+        delayimp.lib advapi32.lib, \
     VERSIONINFO_RESOURCE := $(LIBAWT_VERSIONINFO_RESOURCE), \
     EXTRA_RCFLAGS := $(LIBAWT_RCFLAGS), \
 ))
@@ -216,7 +217,7 @@ ifeq ($(call isTargetOs, windows macosx), false)
       endif
     endif
 
-    LIBAWT_XAWT_LIBS := $(LIBM) -lawt -lXext -lX11 -lXrender $(LIBDL) -lXtst -lXi -ljava -ljvm
+    LIBAWT_XAWT_LIBS := $(LIBM) -lawt -lXext -lX11 -lXrender $(LIBDL) -lXtst -lXi $(JDKLIB_LIBS)
 
     ifeq ($(call isTargetOs, linux), true)
       LIBAWT_XAWT_LIBS += -lpthread
@@ -324,7 +325,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBLCMS, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_unix := -L$(INSTALL_LIBRARIES_HERE), \
-    LIBS_unix := -lawt -ljvm -ljava $(LCMS_LIBS) $(LIBM), \
+    LIBS_unix := -lawt -ljava $(LCMS_LIBS) $(LIBM), \
     LIBS_windows := $(WIN_AWT_LIB) $(WIN_JAVA_LIB), \
 ))
 
@@ -367,7 +368,6 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJAVAJPEG, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LIBS := $(LIBJPEG_LIBS) $(JDKLIB_LIBS), \
-    LIBS_windows := $(WIN_JAVA_LIB) jvm.lib, \
 ))
 
 $(BUILD_LIBJAVAJPEG): $(call FindLib, java.base, java)
@@ -418,7 +418,7 @@ ifeq ($(call isTargetOs, windows macosx), false)
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN), \
       LDFLAGS_unix := -L$(INSTALL_LIBRARIES_HERE), \
-      LIBS_unix := -lawt -ljvm -ljava, \
+      LIBS_unix := -lawt $(JDKLIB_LIBS), \
       LIBS_linux := $(LIBM) $(LIBDL), \
       STATIC_LIB_EXCLUDE_OBJS := $(LIBAWT_HEADLESS_STATIC_EXCLUDE_OBJS), \
   ))
@@ -582,7 +582,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBFONTMANAGER, \
     LDFLAGS_unix := -L$(INSTALL_LIBRARIES_HERE), \
     LDFLAGS_aix := -Wl$(COMMA)-berok, \
     LIBS := $(BUILD_LIBFONTMANAGER_FONTLIB), \
-    LIBS_unix := -lawt -ljava -ljvm $(LIBM) $(LIBCXX), \
+    LIBS_unix := -lawt -ljava $(LIBM) $(LIBCXX), \
     LIBS_macosx := -lawt_lwawt -framework CoreText -framework CoreFoundation -framework CoreGraphics, \
     LIBS_windows := $(WIN_JAVA_LIB) advapi32.lib user32.lib gdi32.lib \
         $(WIN_AWT_LIB), \
@@ -790,7 +790,7 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
         -framework Cocoa \
         -framework Metal
   else ifeq ($(call isTargetOs, windows), true)
-    LIBSPLASHSCREEN_LIBS += kernel32.lib user32.lib gdi32.lib delayimp.lib $(WIN_JAVA_LIB) jvm.lib
+    LIBSPLASHSCREEN_LIBS += kernel32.lib user32.lib gdi32.lib delayimp.lib $(JDKLIB_LIBS)
   else
     LIBSPLASHSCREEN_LIBS += $(X_LIBS) -lX11 -lXext $(LIBM) -lpthread -ldl
   endif
@@ -901,7 +901,7 @@ ifeq ($(call isTargetOs, macosx), true)
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN) \
           -L$(INSTALL_LIBRARIES_HERE), \
-      LIBS := -lawt -lmlib_image -losxapp -ljvm $(LIBM) \
+      LIBS := -lawt -lmlib_image -losxapp $(JDKLIB_LIBS) $(LIBM) \
           -framework Accelerate \
           -framework ApplicationServices \
           -framework AudioToolbox \
@@ -912,7 +912,7 @@ ifeq ($(call isTargetOs, macosx), true)
           -framework ExceptionHandling \
           -framework JavaRuntimeSupport \
           -framework OpenGL \
-          -framework QuartzCore -ljava, \
+          -framework QuartzCore, \
   ))
 
   TARGETS += $(BUILD_LIBAWT_LWAWT)
@@ -974,7 +974,7 @@ ifeq ($(call isTargetOs, macosx), true)
           -framework Carbon \
           -framework ApplicationServices \
           -framework JavaRuntimeSupport \
-          -ljava -ljvm, \
+          $(JDKLIB_LIBS), \
   ))
 
   TARGETS += $(BUILD_LIBOSXUI)

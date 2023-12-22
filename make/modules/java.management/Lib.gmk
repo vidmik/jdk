@@ -42,7 +42,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBMANAGEMENT, \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LIBS := $(JDKLIB_LIBS), \
     LIBS_aix := -lperfstat,\
-    LIBS_windows := jvm.lib psapi.lib $(WIN_JAVA_LIB) advapi32.lib, \
+    LIBS_windows := psapi.lib advapi32.lib, \
 ))
 
 $(BUILD_LIBMANAGEMENT): $(call FindLib, java.base, java)
