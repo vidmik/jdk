@@ -50,14 +50,23 @@ ifeq ($(BASE_OS), OL)
     $(error Only "aarch64 x86_64" architectures are supported for OL, but "$(ARCH)" was requested)
   endif
   BASE_OS_VERSION ?= 7
-  ifeq ($(BASE_OS_VERSION), 7)
+  ifeq ($(BASE_OS_VERSION), 6)
+    ifeq ($(filter x86_64, $(ARCH)), )
+      $(error Only "x86_64" architectures are supported for OL6, but "$(ARCH)" was requested)
+    endif
+    BASE_OS_DESCRIPTION_VERSION := 6.4
+    REPO_BASE_URL := https://yum.oracle.com/repo/OracleLinux/OL6/4
+    BASE_OS_REPOS := base,$(REPO_BASE_URL)/base/$(ARCH)
+  else ifeq ($(BASE_OS_VERSION), 7)
+    BASE_OS_DESCRIPTION_VERSION := 7.6
     REPO_BASE_URL := https://yum.oracle.com/repo/OracleLinux/OL7/6
     BASE_OS_REPOS := base,$(REPO_BASE_URL)/base/$(ARCH)
   else
     REPO_BASE_URL := https://yum.oracle.com/repo/OracleLinux/OL$(BASE_OS_VERSION)
     BASE_OS_REPOS := baseos,$(REPO_BASE_URL)/baseos/latest/$(ARCH) appstream,$(REPO_BASE_URL)/appstream/$(ARCH)
+    BASE_OS_DESCRIPTION_VERSION := $(BASE_OS_VERSION)
   endif
-  BASE_OS_DESCRIPTION := OL$(BASE_OS_VERSION)
+  BASE_OS_DESCRIPTION := OL$(BASE_OS_DESCRIPTION_VERSION)
 else ifeq ($(BASE_OS), Fedora)
   ifeq ($(filter aarch64 armhfp ppc64le riscv64 s390x x86_64, $(ARCH)), )
     $(error Only "aarch64 armhfp ppc64le riscv64 s390x x86_64" architectures are supported for Fedora, but "$(ARCH)" was requested)

@@ -41,7 +41,7 @@ default: tars
 
 tars: $(TAR_FILE)
 
-$(TAR_FILE): $(shell find $(SRC_DIR) -type f)
+$(TAR_FILE): $(shell find $(SRC_DIR) -type f | sed 's/ /\\ /g')
 	@echo 'Creating compiler package $@'
 	cd $(dir $(SRC_DIR)) && tar -czf $@ $(notdir $(SRC_DIR))/*
 	touch $@

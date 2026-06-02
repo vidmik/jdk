@@ -35,6 +35,10 @@ else
   KERNEL_HEADERS_RPM := kernel-headers
 endif
 
+ifneq ($(BASE_OS)-$(BASE_OS_VERSION), OL-6)
+  WAYLAND_RPMS := wayland-devel wayland-protocols-devel
+endif
+
 ZLIB_RPMS := zlib zlib-devel
 ifeq ($(BASE_OS), Fedora)
   ifneq ($(ARCH), armhfp)
@@ -69,7 +73,7 @@ RPM_LIST := \
     libffi libffi-devel \
     fontconfig fontconfig-devel \
     systemtap-sdt-devel \
-    wayland-devel wayland-protocols-devel \
+    $(WAYLAND_RPMS) \
     #
 
 ################################################################################
@@ -128,11 +132,8 @@ DNF_DOWNLOAD_FLAGS := \
 $(DOWNLOAD_RPMS_MARKER):
 	@mkdir -p $(@D)
 	mkdir -p $(DOWNLOAD_RPMS)
-        # Only run this if rpm dir is empty.
-        ifeq ($(wildcard $(DOWNLOAD_RPMS)/*.rpm), )
-	  echo $(RPM_LIST) | \
-	      xargs dnf download $(DNF_DOWNLOAD_FLAGS) --destdir $(DOWNLOAD_RPMS)
-        endif
+	echo $(RPM_LIST) | \
+	    xargs dnf download $(DNF_DOWNLOAD_FLAGS) --destdir $(DOWNLOAD_RPMS)
 	touch $@
 
 ################################################################################
